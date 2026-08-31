@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Soda Pop 1, 2, 3</string>
+    <string name="title_activity_main">Soda Pop 1, 2, 3</string>
+    <string name="package_name">com.emre.sodapop123</string>
+    <string name="custom_url_scheme">com.emre.sodapop123</string>
+</resources>

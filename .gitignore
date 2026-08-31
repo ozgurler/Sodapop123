@@ -1,0 +1,32 @@
+node_modules/
+dist/
+dist-demo/
+demo/
+preview/
+.DS_Store
+*.log
+
+# Capacitor copies the built web bundle into the native projects on `cap sync`.
+# The native projects themselves ARE committed; these copies are build output.
+ios/App/App/public/
+ios/App/Pods/
+ios/App/output/
+android/app/src/main/assets/public/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Signing material never belongs in the repo.
+*.p12
+*.mobileprovision
+*.keystore
+*.jks
+
+# Fastlane run artifacts — regenerated every CI run, never hand-edited.
+ios/fastlane/report.xml
+ios/fastlane/Preview.html
+ios/fastlane/screenshots/
+ios/fastlane/test_output/
+*.ipa
+*.dSYM.zip

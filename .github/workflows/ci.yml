@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: # manual "Run workflow" button — used for the iOS/TestFlight job
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Type-check and build
+        run: npm run build
+      - name: Logic suite
+        run: npm test
+      - name: Difficulty sweep
+        run: npx tsx test/tune.ts
+      - name: Build the single-file demo
+        run: npm run demo
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: demo
+
+  # Publishes the playable demo so it can be opened on a phone without Xcode.
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # Real native build. Runs on Apple's own hardware via GitHub's macOS
+  # runner — this is the only place in the whole pipeline a Mac exists.
+  # Manual only: TestFlight builds are worth a deliberate click, not every
+  # push. Trigger from the Actions tab -> "CI" -> "Run workflow".
+  ios-testflight:
+    if: github.event_name == 'workflow_dispatch'
+    needs: check
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync ios
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: false
+      - run: gem install fastlane -N
+
+      - name: Build and upload to TestFlight
+        working-directory: ios
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          ASC_BUNDLE_ID: ${{ secrets.ASC_BUNDLE_ID }}
+        run: fastlane beta

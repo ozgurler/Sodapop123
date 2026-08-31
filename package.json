@@ -1,0 +1,35 @@
+{
+  "name": "soda-pop-123",
+  "version": "0.1.0",
+  "description": "Soda Pop 1, 2, 3 \u2014 Thumb War Version. Two-player thumb war on one device.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "mkdir -p preview && tsx scripts/preview.ts",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:ios": "npm run cap:sync && npx cap open ios",
+    "cap:android": "npm run cap:sync && npx cap open android",
+    "test": "tsx test/harness.ts",
+    "demo": "vite build --config vite.demo.config.ts && node scripts/bundle-demo.mjs",
+    "icons": "tsx scripts/make-icon.ts && tsx scripts/make-splash.ts && capacitor-assets generate --ios --android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/preferences": "^7.0.0",
+    "@capacitor/screen-orientation": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0",
+    "@napi-rs/canvas": "^1.0.8",
+    "tsx": "^4.23.12",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}

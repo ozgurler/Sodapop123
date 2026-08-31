@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+# Runs on GitHub's macOS CI runner, never locally — there's no macOS machine
+# in this project's normal workflow. `xcodebuild -allowProvisioningUpdates`
+# with an App Store Connect API key creates and refreshes the signing
+# certificate and provisioning profile itself; no `match`, no manually
+# exported .p12, nothing to keep in sync by hand.
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_CONTENT"],
+      is_key_content_base64: true,
+    )
+
+    # Bump the build number to the CI run number so every TestFlight upload
+    # is unique without hand-editing a counter in Xcode.
+    increment_build_number(
+      xcodeproj: "App.xcodeproj",
+      build_number: ENV["GITHUB_RUN_NUMBER"] || Time.now.to_i.to_s,
+    )
+
+    build_app(
+      workspace: "App.xcworkspace",
+      scheme: "App",
+      export_method: "app-store",
+      xcargs: "-allowProvisioningUpdates",
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+    )
+  end
+end

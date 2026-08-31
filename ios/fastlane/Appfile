@@ -1,0 +1,2 @@
+app_identifier(ENV["ASC_BUNDLE_ID"] || "com.emre.sodapop123")
+team_id(ENV["ASC_TEAM_ID"])
