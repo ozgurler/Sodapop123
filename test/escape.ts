@@ -1,5 +1,5 @@
 // How fast must you tap to escape a pin? Sweeps realistic human tap rates.
-import { StateMachine } from '/home/claude/soda-pop-123/src/game/stateMachine';
+import { StateMachine } from '../src/game/stateMachine';
 const W = 402, H = 874;
 
 function tryEscape(tapsPerSec: number): { escaped: boolean; ms: number } {

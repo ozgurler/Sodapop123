@@ -1,7 +1,7 @@
 // Difficulty sanity check: AI vs a competent scripted human, 60 matches each tier.
-import { StateMachine } from '/home/claude/soda-pop-123/src/game/stateMachine';
-import { AiController } from '/home/claude/soda-pop-123/src/game/ai';
-import type { Difficulty } from '/home/claude/soda-pop-123/src/types';
+import { StateMachine } from '../src/game/stateMachine';
+import { AiController } from '../src/game/ai';
+import type { Difficulty } from '../src/types';
 
 const W = 402, H = 874;
 function playMatch(diff: Difficulty, humanReaction: number): 'p1' | 'p2' {

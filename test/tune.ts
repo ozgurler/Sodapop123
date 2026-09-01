@@ -1,7 +1,7 @@
 // Sweep AI reaction/jitter per tier and report human win rate vs an optimal script.
-import { StateMachine } from '/home/claude/soda-pop-123/src/game/stateMachine';
-import { AiController } from '/home/claude/soda-pop-123/src/game/ai';
-import type { Difficulty } from '/home/claude/soda-pop-123/src/types';
+import { StateMachine } from '../src/game/stateMachine';
+import { AiController } from '../src/game/ai';
+import type { Difficulty } from '../src/types';
 const W=402,H=874;
 // Real players jump the gun sometimes; a script that never faults makes the
 // fault rule a one-sided penalty on the AI and skews every result.
