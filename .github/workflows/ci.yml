@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Type-check and build
@@ -49,10 +49,18 @@ jobs:
       - id: deploy
         uses: actions/deploy-pages@v4
 
-  # Real native build. Runs on Apple's own hardware via GitHub's macOS
-  # runner — this is the only place in the whole pipeline a Mac exists.
-  # Manual only: TestFlight builds are worth a deliberate click, not every
-  # push. Trigger from the Actions tab -> "CI" -> "Run workflow".
+  # Real native build, on GitHub's macOS runner — the only place in this
+  # pipeline a Mac exists. Manual signing throughout: the certificate and
+  # provisioning profile come from secrets, already created, so nothing has
+  # to be generated on a machine that gets wiped after the job.
+  #
+  # Automatic signing does NOT work here. It resolves to an "iOS App
+  # Development" profile, which requires registered device UDIDs a runner
+  # will never have; and any tool that creates a certificate on the runner
+  # loses the private key when the runner dies, so it creates a fresh one
+  # every run until Apple's 3-certificate limit is hit.
+  #
+  # Manual only. Trigger from Actions -> "CI" -> "Run workflow".
   ios-testflight:
     if: github.event_name == 'workflow_dispatch'
     needs: check
@@ -61,26 +69,111 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
       - run: npx cap sync ios
 
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.3'
-          bundler-cache: false
-      - run: gem install fastlane -N
-
-      - name: Build and upload to TestFlight
-        # fastlane's project root is the parent of wherever fastlane/ lives —
-        # that has to be ios/App (a sibling of App.xcodeproj), not ios/.
-        working-directory: ios/App
+      - name: Import signing certificate
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
-          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
-          ASC_BUNDLE_ID: ${{ secrets.ASC_BUNDLE_ID }}
-        run: fastlane beta
+          CERT_P12: ${{ secrets.ASC_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.ASC_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.ASC_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in CERT_P12 CERT_PASSWORD KEYCHAIN_PASSWORD; do
+            if [ -z "${!v}" ]; then echo "::error::Secret ASC_$v is missing or empty"; exit 1; fi
+          done
+          echo "$CERT_P12" | base64 --decode > /tmp/cert.p12
+          # A dedicated keychain, unlocked for the life of the job. The
+          # password protects nothing beyond this runner.
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security import /tmp/cert.p12 -k build.keychain -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          # Lets codesign use the key without an interactive prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain >/dev/null
+          rm /tmp/cert.p12
+          echo "Installed identities:"
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Install provisioning profile
+        id: profile
+        env:
+          PROFILE_BASE64: ${{ secrets.ASC_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PROFILE_BASE64" ]; then
+            echo "::error::Secret ASC_PROFILE is missing or empty"; exit 1
+          fi
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE_BASE64" | base64 --decode > /tmp/profile.mobileprovision
+          # Read the profile's own name rather than hardcoding it — a typo in
+          # a hardcoded PROVISIONING_PROFILE_SPECIFIER is a confusing failure.
+          security cms -D -i /tmp/profile.mobileprovision > /tmp/profile.plist
+          NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist)
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist)
+          APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/profile.plist)
+          cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Profile: $NAME ($UUID) for $APPID"
+
+      - name: Archive
+        env:
+          TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          PROFILE_NAME: ${{ steps.profile.outputs.name }}
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -archivePath build/App.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+
+      - name: Export and upload to App Store Connect
+        env:
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          BUNDLE_ID: ${{ secrets.ASC_BUNDLE_ID }}
+          PROFILE_NAME: ${{ steps.profile.outputs.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/private_keys
+          echo "$KEY_CONTENT" | base64 --decode > ~/private_keys/AuthKey_$KEY_ID.p8
+          grep -q "PRIVATE KEY" ~/private_keys/AuthKey_$KEY_ID.p8 || {
+            echo "::error::ASC_KEY_CONTENT did not decode to a .p8 private key"; exit 1; }
+          # Unquoted heredoc so the variables below get substituted.
+          cat > /tmp/exportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$BUNDLE_ID</key>
+              <string>$PROFILE_NAME</string>
+            </dict>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportOptionsPlist /tmp/exportOptions.plist \
+            -exportPath build \
+            -authenticationKeyPath ~/private_keys/AuthKey_$KEY_ID.p8 \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID"
