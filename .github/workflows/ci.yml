@@ -74,7 +74,9 @@ jobs:
       - run: gem install fastlane -N
 
       - name: Build and upload to TestFlight
-        working-directory: ios
+        # fastlane's project root is the parent of wherever fastlane/ lives —
+        # that has to be ios/App (a sibling of App.xcodeproj), not ios/.
+        working-directory: ios/App
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

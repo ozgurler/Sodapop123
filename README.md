@@ -67,6 +67,13 @@ Signing is automatic: `xcodebuild -allowProvisioningUpdates` plus an App Store C
 API key creates and refreshes the certificate and provisioning profile itself, so
 there's no `fastlane match` repo and no `.p12` file to keep in sync.
 
+`ios/App/fastlane/` sits as a sibling of `App.xcodeproj`, not at `ios/fastlane/` — that
+placement isn't cosmetic. Fastlane treats the parent of wherever `fastlane/` lives as
+the project root, and every path in the `Fastfile` (`"App.xcodeproj"`,
+`"App.xcworkspace"`) is a bare filename resolved against that root. Move the folder
+without updating the CI job's `working-directory: ios/App` (or vice versa) and the
+build fails with "Could not find Xcode project" even though both files clearly exist.
+
 One-time setup, all in the *existing* App Store Connect account:
 
 1. **App Store Connect → Users and Access → Integrations → App Store Connect API →
