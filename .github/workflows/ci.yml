@@ -64,9 +64,25 @@ jobs:
   ios-testflight:
     if: github.event_name == 'workflow_dispatch'
     needs: check
-    runs-on: macos-15
+    # macos-15 defaults to Xcode 16.4 / iOS 18.5 SDK, and Apple now rejects
+    # any upload built below the iOS 26 SDK. macos-26 defaults to Xcode 26.x.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      # Belt and braces: pick the newest Xcode on the image explicitly, so a
+      # change to the runner's default can't silently drop the SDK version
+      # back below Apple's minimum.
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          ls /Applications | grep -i '^Xcode' || true
+          LATEST=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
