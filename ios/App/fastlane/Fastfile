@@ -60,8 +60,33 @@ platform :ios do
     build_app(
       workspace: "App.xcworkspace",
       scheme: "App",
+      # Archive the Release config explicitly rather than relying on whatever
+      # xcodebuild picks for an auto-generated scheme (there's no shared
+      # .xcscheme in the repo — Capacitor doesn't create one).
       configuration: "Release",
       export_method: "app-store",
+      # DEVELOPMENT_TEAM is blank in the generated Xcode project — Capacitor
+      # has no way to know it at project-generation time, and team_id() in
+      # the Appfile only scopes Fastlane's own API calls, not the xcodebuild
+      # archive step itself.
+      #
+      # -allowProvisioningUpdates on its own isn't enough either: with no
+      # Apple ID signed into Xcode's Accounts pane (there never will be one
+      # on a CI runner), it fails with "No Accounts" / "No profiles found".
+      # It needs the SAME API key handed to it explicitly via
+      # -authenticationKey* flags so it can create the certificate and
+      # profile itself, the same way app_store_connect_api_key authenticates
+      # Fastlane's own API calls above.
+      #
+      # Deliberately NOT setting CODE_SIGN_IDENTITY, here or in the project.
+      # The App target uses CODE_SIGN_STYLE = Automatic, and Xcode reads ANY
+      # explicit identity as MANUAL signing — which conflicts with that and
+      # fails the archive, whatever value is used. Left unset, automatic
+      # signing picks the identity itself: development for a normal build,
+      # distribution for an archive. Capacitor ships the project with
+      # CODE_SIGN_IDENTITY = "iPhone Developer" hardcoded into the Release
+      # config; that line is removed in App.xcodeproj (Debug keeps it, which
+      # is correct for running on a device locally).
       xcargs: [
         "-allowProvisioningUpdates",
         "-authenticationKeyPath '#{key_path}'",
