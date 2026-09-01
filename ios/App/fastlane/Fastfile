@@ -60,40 +60,14 @@ platform :ios do
     build_app(
       workspace: "App.xcworkspace",
       scheme: "App",
-      # Without this the archive runs the scheme's default configuration
-      # (Debug), which asks Apple for an "iOS App Development" profile — and
-      # those require registered device UDIDs, so it fails on CI with
-      # "your team has no devices from which to generate a provisioning
-      # profile". App Store distribution profiles need no devices at all.
       configuration: "Release",
       export_method: "app-store",
-      # DEVELOPMENT_TEAM is blank in the generated Xcode project — Capacitor
-      # has no way to know it at project-generation time, and team_id() in
-      # the Appfile only scopes Fastlane's own API calls, not the xcodebuild
-      # archive step itself.
-      #
-      # -allowProvisioningUpdates on its own isn't enough either: with no
-      # Apple ID signed into Xcode's Accounts pane (there never will be one
-      # on a CI runner), it fails with "No Accounts" / "No profiles found".
-      # It needs the SAME API key handed to it explicitly via
-      # -authenticationKey* flags so it can create the certificate and
-      # profile itself, the same way app_store_connect_api_key authenticates
-      # Fastlane's own API calls above.
       xcargs: [
         "-allowProvisioningUpdates",
         "-authenticationKeyPath '#{key_path}'",
         "-authenticationKeyID #{ENV['ASC_KEY_ID']}",
         "-authenticationKeyIssuerID #{ENV['ASC_ISSUER_ID']}",
         "DEVELOPMENT_TEAM=#{ENV['ASC_TEAM_ID']}",
-        "CODE_SIGN_STYLE=Automatic",
-        # Capacitor hardcodes CODE_SIGN_IDENTITY = "iPhone Developer" into the
-        # project's Release config. That's what actually decides which profile
-        # Xcode asks Apple for — not the build configuration — so archiving
-        # kept requesting an "iOS App Development" profile, which needs
-        # registered device UDIDs and fails on CI with "your team has no
-        # devices". "Apple Distribution" is the App Store counterpart and
-        # needs no devices at all.
-        "CODE_SIGN_IDENTITY='Apple Distribution'",
       ].join(" "),
     )
 
