@@ -74,6 +74,12 @@ the project root, and every path in the `Fastfile` (`"App.xcodeproj"`,
 without updating the CI job's `working-directory: ios/App` (or vice versa) and the
 build fails with "Could not find Xcode project" even though both files clearly exist.
 
+The generated Xcode project also has no `DEVELOPMENT_TEAM` set — Capacitor can't know your team ID
+at project-generation time, and `team_id()` in the `Appfile` only scopes Fastlane's own API calls,
+not the actual `xcodebuild` archive step. The `Fastfile` passes it in explicitly via `xcargs`,
+reading the same `ASC_TEAM_ID` secret used everywhere else, which is what lets automatic signing
+pick a team to request a certificate and profile for.
+
 One-time setup, all in the *existing* App Store Connect account:
 
 1. **App Store Connect → Users and Access → Integrations → App Store Connect API →
