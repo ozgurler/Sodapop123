@@ -2,11 +2,21 @@
 
 require "base64"
 
+# Runs on GitHub's macOS CI runner, never locally — there's no macOS machine
+# in this project's normal workflow. `xcodebuild -allowProvisioningUpdates`
+# with an App Store Connect API key creates and refreshes the signing
+# certificate and provisioning profile itself; no `match`, no manually
+# exported .p12, nothing to keep in sync by hand.
 default_platform(:ios)
 
 platform :ios do
   desc "Build and upload to TestFlight"
   lane :beta do
+    # A GitHub secret that's missing or was saved empty doesn't fail the
+    # workflow — it just interpolates as "" and produces a misleading Xcode
+    # error three steps later (this happened: an empty ASC_TEAM_ID showed up
+    # as "Signing requires a development team", not as anything mentioning
+    # the secret itself). Check up front and name the exact secret at fault.
     required = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT ASC_TEAM_ID ASC_BUNDLE_ID]
     missing = required.select { |k| ENV[k].to_s.strip.empty? }
     unless missing.empty?
@@ -23,8 +33,16 @@ platform :ios do
       is_key_content_base64: true,
     )
 
+    # xcodebuild's -authenticationKeyPath wants a real .p8 on disk, but
+    # app_store_connect_api_key was given key_content, so it keeps the key in
+    # memory and api_key[:key_filepath] is nil — which silently became
+    # `-authenticationKeyPath ''` and left xcodebuild falling back to looking
+    # for a signed-in Apple ID. Write the decoded key out ourselves and point
+    # at that. Fastlane's own actions keep using the in-memory api_key.
     key_path = File.expand_path("~/.appstoreconnect_key.p8")
     File.write(key_path, Base64.decode64(ENV["ASC_KEY_CONTENT"]))
+    # A .p8 that decoded to garbage (wrong encoding when the secret was
+    # pasted) would otherwise surface as an opaque xcodebuild auth failure.
     unless File.read(key_path).include?("PRIVATE KEY")
       UI.user_error!(
         "ASC_KEY_CONTENT did not decode to a valid .p8 private key. " \
@@ -32,6 +50,8 @@ platform :ios do
       )
     end
 
+    # Bump the build number to the CI run number so every TestFlight upload
+    # is unique without hand-editing a counter in Xcode.
     increment_build_number(
       xcodeproj: "App.xcodeproj",
       build_number: ENV["GITHUB_RUN_NUMBER"] || Time.now.to_i.to_s,
@@ -40,8 +60,25 @@ platform :ios do
     build_app(
       workspace: "App.xcworkspace",
       scheme: "App",
+      # Without this the archive runs the scheme's default configuration
+      # (Debug), which asks Apple for an "iOS App Development" profile — and
+      # those require registered device UDIDs, so it fails on CI with
+      # "your team has no devices from which to generate a provisioning
+      # profile". App Store distribution profiles need no devices at all.
       configuration: "Release",
       export_method: "app-store",
+      # DEVELOPMENT_TEAM is blank in the generated Xcode project — Capacitor
+      # has no way to know it at project-generation time, and team_id() in
+      # the Appfile only scopes Fastlane's own API calls, not the xcodebuild
+      # archive step itself.
+      #
+      # -allowProvisioningUpdates on its own isn't enough either: with no
+      # Apple ID signed into Xcode's Accounts pane (there never will be one
+      # on a CI runner), it fails with "No Accounts" / "No profiles found".
+      # It needs the SAME API key handed to it explicitly via
+      # -authenticationKey* flags so it can create the certificate and
+      # profile itself, the same way app_store_connect_api_key authenticates
+      # Fastlane's own API calls above.
       xcargs: [
         "-allowProvisioningUpdates",
         "-authenticationKeyPath '#{key_path}'",
@@ -49,6 +86,14 @@ platform :ios do
         "-authenticationKeyIssuerID #{ENV['ASC_ISSUER_ID']}",
         "DEVELOPMENT_TEAM=#{ENV['ASC_TEAM_ID']}",
         "CODE_SIGN_STYLE=Automatic",
+        # Capacitor hardcodes CODE_SIGN_IDENTITY = "iPhone Developer" into the
+        # project's Release config. That's what actually decides which profile
+        # Xcode asks Apple for — not the build configuration — so archiving
+        # kept requesting an "iOS App Development" profile, which needs
+        # registered device UDIDs and fails on CI with "your team has no
+        # devices". "Apple Distribution" is the App Store counterpart and
+        # needs no devices at all.
+        "CODE_SIGN_IDENTITY='Apple Distribution'",
       ].join(" "),
     )
 
