@@ -222,6 +222,14 @@ fingernails were drawn outside the thumb entirely.
 - Haptics and sound individually toggleable
 - Every control is 56px+ on its short edge
 
+## iOS deployment target
+
+Set to **15.0** in both `ios/App/Podfile` and `ios/App/App.xcodeproj` — the two have to
+agree or CocoaPods and the app target disagree at build time. Capacitor generates 14.0,
+which Apple warns about (ITMS-90068) and refuses outright from Spring 2027. Nothing in
+this game needs an API newer than 14, so raising it costs nothing; iOS 15 covers
+essentially every device still in use.
+
 ## Notes
 
 - No network calls anywhere; settings, progress and profiles live on-device via Capacitor
