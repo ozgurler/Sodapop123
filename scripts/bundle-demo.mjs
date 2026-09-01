@@ -3,7 +3,7 @@
  * data URIs. No network, no relative asset paths — it runs from a file:// URL,
  * an AirDrop, or a static host with equal indifference.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DIST = 'dist-demo';
@@ -31,5 +31,7 @@ if (leftovers) {
   process.exit(1);
 }
 
+// demo/ is gitignored build output, so a fresh checkout won't have it yet.
+mkdirSync('demo', { recursive: true });
 writeFileSync('demo/index.html', html);
 console.log(`demo/index.html — ${(html.length / 1024).toFixed(0)} kB, fully self-contained`);
