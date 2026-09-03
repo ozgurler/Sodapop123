@@ -101,11 +101,27 @@ Secondary: **Games → Action**
 
 # Submission checklist
 
+## iPad support — decide this first
+
+The game is a portrait phone layout and has no iPad-specific design. Two options:
+
+- **Turn off iPad in App Information → General Information** (recommended). This removes
+  the iPad screenshot requirement entirely — nothing to upload, nothing to explain.
+- **Leave iPad enabled.** Capacitor apps run on iPad by default via letterboxing, so
+  nothing crashes — but the play area sits in the middle of the screen with large dark
+  bars either side. Screenshots for this are in `store/screenshots-ipad/`, generated to
+  show exactly that, since Guideline 2.3 requires screenshots to reflect the real app.
+
 ## In App Store Connect
 
-- [ ] **Screenshots** — upload all 7 from `store/screenshots/` (1320×2868, the 6.9"
-      class). Apple scales these down for every smaller iPhone, so this one set is all
-      that's needed. Order matters: most people only look at the first three.
+- [ ] **iPhone screenshots** — upload all 7 from `store/screenshots/` (1284×2778 — one of
+      the sizes App Store Connect's iPhone slot accepts for this listing). Order matters:
+      most people only look at the first three.
+- [ ] **iPad screenshots** — only required if iPad support is enabled (see the note
+      above). Upload all 7 from `store/screenshots-ipad/` (2064×2752, the 13" class).
+      These show the real letterboxed layout — the game is portrait-phone-shaped and was
+      never designed for iPad's wider screen, so dark bars appear on both sides. That is
+      genuinely how the shipping app looks on that size, not a rendering mistake.
 - [ ] **Description, keywords, subtitle, promo text** — from above
 - [ ] **Support URL and Privacy Policy URL** — from above
 - [ ] **Age Rating** questionnaire — answer everything "None". The result should be 4+.
@@ -143,7 +159,9 @@ testing alone might otherwise think the top half is unresponsive.
 # Regenerating these assets
 
 ```bash
-npm run screenshots   # re-renders store/screenshots/*.png at 1320x2868
+npm run screenshots   # re-renders both store/screenshots/ (iPhone) and
+                       # store/screenshots-ipad/ (iPad, letterboxed) at their
+                       # exact required pixel sizes
 npm run demo          # rebuilds the demo site + privacy.html
 ```
 
