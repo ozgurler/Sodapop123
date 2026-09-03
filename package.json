@@ -13,7 +13,8 @@
     "cap:android": "npm run cap:sync && npx cap open android",
     "test": "tsx test/harness.ts",
     "demo": "vite build --config vite.demo.config.ts && node scripts/bundle-demo.mjs",
-    "icons": "tsx scripts/make-icon.ts && tsx scripts/make-splash.ts && capacitor-assets generate --ios --android"
+    "icons": "tsx scripts/make-icon.ts && tsx scripts/make-splash.ts && capacitor-assets generate --ios --android",
+    "screenshots": "tsx scripts/store-screenshots.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",

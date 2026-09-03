@@ -3,7 +3,7 @@
  * data URIs. No network, no relative asset paths — it runs from a file:// URL,
  * an AirDrop, or a static host with equal indifference.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DIST = 'dist-demo';
@@ -35,3 +35,8 @@ if (leftovers) {
 mkdirSync('demo', { recursive: true });
 writeFileSync('demo/index.html', html);
 console.log(`demo/index.html — ${(html.length / 1024).toFixed(0)} kB, fully self-contained`);
+
+// The App Store listing needs a publicly reachable privacy policy URL, and
+// this site is already being published — so serve it from here too.
+copyFileSync('store/privacy.html', 'demo/privacy.html');
+console.log('demo/privacy.html — privacy policy for the store listing');
