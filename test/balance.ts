@@ -18,7 +18,7 @@ function playMatch(diff: Difficulty, humanReaction: number): 'p1' | 'p2' {
       if (plan === null) plan = now + humanReaction;
       if (now >= plan && sm.aligned) {
         sm.press('p1', { x: me.pos.x, y: me.pos.y }, now);
-        sm.move('p1', { x: me.pos.x, y: me.pos.y + 60 }, now, 24);
+        sm.move('p1', { x: me.pos.x, y: me.pos.y - 60 }, now, 24);
         sm.release('p1'); plan = null;
       }
     } else if (sm.phase === 'pin' && sm.round.pinner === 'p2') {
@@ -27,7 +27,7 @@ function playMatch(diff: Difficulty, humanReaction: number): 'p1' | 'p2' {
   }
   return sm.match.matchWinner ?? 'p2';
 }
-for (const d of ['rookie', 'contender', 'champ'] as Difficulty[]) {
+for (const d of ['rookie', 'scrapper', 'contender', 'champ'] as Difficulty[]) {
   let humanWins = 0;
   for (let i = 0; i < 60; i++) if (playMatch(d, 260) === 'p1') humanWins++;
   console.log(`${d.padEnd(10)} human win rate: ${((humanWins / 60) * 100).toFixed(0)}%`);

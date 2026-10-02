@@ -321,3 +321,51 @@ export function chevron(
   ctx.stroke();
   ctx.restore();
 }
+
+/** Settings gear. */
+export function gear(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  color: string,
+): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  const teeth = 8;
+  for (let i = 0; i < teeth * 2; i++) {
+    const a = (i * Math.PI) / teeth;
+    const rad = i % 2 === 0 ? r : r * 0.74;
+    const x = Math.cos(a) * rad;
+    const y = Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** An iOS-style switch, drawn to match the chunky-sticker look. */
+export function toggle(ctx: CanvasRenderingContext2D, r: Rect, on: boolean): void {
+  chunk(ctx, r, {
+    fill: on ? C.teal : 'rgba(34,29,43,.18)',
+    radius: r.h / 2,
+    border: 4,
+  });
+  const kr = r.h / 2 - 7;
+  const kx = on ? r.x + r.w - kr - 7 : r.x + kr + 7;
+  ctx.beginPath();
+  ctx.arc(kx, r.y + r.h / 2, kr, 0, Math.PI * 2);
+  ctx.fillStyle = C.white;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = C.ink;
+  ctx.stroke();
+}

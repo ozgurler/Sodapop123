@@ -24,7 +24,7 @@ import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { StateMachine } from '../src/game/stateMachine';
 import { DESIGN_W, thumbTip } from '../src/game/geometry';
-import { FOE_SKIN, SKINS, STAGES, VERSUS_STAGE, skinById } from '../src/game/content';
+import { SKINS, STAGES, VERSUS_STAGE, opponentSkin, skinById } from '../src/game/content';
 import { drawAlignmentGuide, drawCrate, drawHole, drawHoleRim, drawThumb } from '../src/render/crate';
 import { BattleHud, drawMatchEnd, type BattleView } from '../src/render/hud';
 import { drawStages, drawThumbs, drawTitle, type MenuView } from '../src/render/screens';
@@ -51,7 +51,7 @@ const menu = (H: number, over: Partial<MenuView> = {}): MenuView => ({
   save: { ...DEFAULT_SAVE, caps: 1240, cleared: 1 },
   skinCursor: 0,
   stageCursor: 1,
-  soundOn: true,
+  settings,
   helpOpen: false,
   pressed: null,
   toast: '',
@@ -187,7 +187,7 @@ function renderDeviceSet(dir: string, pxW: number, pxH: number): void {
     mode: { kind: 'solo', difficulty: 'contender' },
     stage: STAGES[1],
     skin: skinById(DEFAULT_SAVE.skin),
-    foeSkin: FOE_SKIN,
+    foeSkin: opponentSkin(STAGES[1], DEFAULT_SAVE.skin),
     shout: '',
     shoutUntil: 0,
     capsEarned: 180,

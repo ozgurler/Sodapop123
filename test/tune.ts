@@ -18,18 +18,18 @@ function match(diff:Difficulty,hr:number,tapMs:number,faultChance:number):'p1'|'
     if(sm.phase==='chant'&&faultAt!==null&&now>=faultAt){
       faultAt=null;
       sm.press('p1',{x:me.pos.x,y:me.pos.y},now);
-      sm.move('p1',{x:me.pos.x,y:me.pos.y+60},now,24);
+      sm.move('p1',{x:me.pos.x,y:me.pos.y-60},now,24);
       sm.release('p1');
     }
     sm.aim('p1',me.pos.x+Math.sign(foe.pos.x-me.pos.x)*Math.min(Math.abs(foe.pos.x-me.pos.x),5));
     if(sm.phase==='strike'){ if(plan===null)plan=now+hr;
-      if(now>=plan&&sm.aligned){sm.press('p1',{x:me.pos.x,y:me.pos.y},now);sm.move('p1',{x:me.pos.x,y:me.pos.y+60},now,24);sm.release('p1');plan=null;} }
+      if(now>=plan&&sm.aligned){sm.press('p1',{x:me.pos.x,y:me.pos.y},now);sm.move('p1',{x:me.pos.x,y:me.pos.y-60},now,24);sm.release('p1');plan=null;} }
     else if(sm.phase==='pin'&&sm.round.pinner==='p2'){ if(now%tapMs<16){sm.press('p1',{x:me.pos.x,y:me.pos.y},now);sm.release('p1');} }
     else plan=null;
   }
   return sm.match.matchWinner??'stalemate';
 }
-for(const d of ['rookie','contender','champ'] as Difficulty[]){
+for(const d of ['rookie','scrapper','contender','champ'] as Difficulty[]){
   for(const [label,hr,tap,fc] of [['sharp',260,128,0.05],['average',360,160,0.09],['casual',480,220,0.14]] as [string,number,number,number][]){
     let wins=0,stale=0; const N=80;
     for(let i=0;i<N;i++){const r=match(d,hr,tap,fc); if(r==='p1')wins++; else if(r==='stalemate')stale++;}

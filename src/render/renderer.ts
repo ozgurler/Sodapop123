@@ -4,8 +4,8 @@ import { DESIGN_W, thumbTip } from '../game/geometry';
 import { C } from './theme';
 import { FOE_SKIN } from '../game/content';
 import { Effects } from './effects';
-import { BattleHud, drawMatchEnd, type BattleView } from './hud';
-import { drawHelp, drawStages, drawThumbs, drawTitle, type MenuView } from './screens';
+import { BattleHud, drawMatchEnd, drawPauseButton, drawPaused, type BattleView } from './hud';
+import { drawHelp, drawSettings, drawStages, drawThumbs, drawTitle, type MenuView } from './screens';
 import { drawAlignmentGuide, drawCrate, drawHole, drawHoleRim, drawThumb } from './crate';
 
 /**
@@ -101,12 +101,21 @@ export class Renderer {
       if (v.helpOpen) drawHelp(this.ctx, v, w, h);
     } else if (screen === 'thumbs') {
       drawThumbs(this.ctx, v, w, h);
+    } else if (screen === 'settings') {
+      drawSettings(this.ctx, v, w, h);
     } else {
       drawStages(this.ctx, v, w, h);
     }
   }
 
-  drawBattle(v: BattleView, now: number, dt: number, canAdvance: boolean, pressed: string | null): void {
+  drawBattle(
+    v: BattleView,
+    now: number,
+    dt: number,
+    canAdvance: boolean,
+    pressed: string | null,
+    paused = false,
+  ): void {
     this.begin();
     const { ctx } = this;
     const w = this.width;
@@ -124,7 +133,13 @@ export class Renderer {
     this.effects.draw(ctx);
 
     this.hud.draw(ctx, v, w, h, now);
-    if (sm.phase === 'matchEnd') drawMatchEnd(ctx, v, w, h, canAdvance, pressed);
+    if (sm.phase === 'matchEnd') {
+      drawMatchEnd(ctx, v, w, h, canAdvance, pressed);
+    } else if (paused) {
+      drawPaused(ctx, w, h, pressed);
+    } else {
+      drawPauseButton(ctx, w, pressed === 'pause');
+    }
   }
 
   /**

@@ -3,13 +3,13 @@
  * Dev tooling only — never imported by the app. Run: npx tsx scripts/preview.ts
  */
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { StateMachine } from '../src/game/stateMachine';
 import { DESIGN_H, DESIGN_W, seamY } from '../src/game/geometry';
-import { FOE_SKIN, SKINS, STAGES, VERSUS_STAGE, skinById } from '../src/game/content';
+import { SKINS, STAGES, VERSUS_STAGE, opponentSkin, skinById } from '../src/game/content';
 import { drawCrate, drawHole, drawHoleRim, drawThumb, drawAlignmentGuide } from '../src/render/crate';
-import { BattleHud, drawMatchEnd, type BattleView } from '../src/render/hud';
-import { drawHelp, drawStages, drawThumbs, drawTitle, type MenuView } from '../src/render/screens';
+import { BattleHud, drawMatchEnd, drawPauseButton, drawPaused, type BattleView } from '../src/render/hud';
+import { drawHelp, drawSettings, drawStages, drawThumbs, drawTitle, type MenuView } from '../src/render/screens';
 import { thumbTip } from '../src/game/geometry';
 import { DEFAULT_SAVE } from '../src/data/save';
 import type { PlayerId, Settings } from '../src/types';
@@ -28,6 +28,8 @@ const settings: Settings = {
   soundEnabled: true,
 };
 
+mkdirSync('preview', { recursive: true });
+
 function frame(name: string, draw: (ctx: any) => void, h: number = H): void {
   const canvas = createCanvas(W * 2, h * 2);
   const ctx = canvas.getContext('2d');
@@ -43,7 +45,7 @@ const menu = (over: Partial<MenuView> = {}): MenuView => ({
   save: { ...DEFAULT_SAVE, caps: 2400, cleared: 1 },
   skinCursor: 0,
   stageCursor: 1,
-  soundOn: true,
+  settings,
   helpOpen: false,
   pressed: null,
   toast: '',
@@ -82,7 +84,7 @@ function battleView(sm: StateMachine, over: Partial<BattleView> = {}): BattleVie
     mode: { kind: 'solo', difficulty: 'contender' },
     stage: STAGES[1],
     skin: skinById(DEFAULT_SAVE.skin),
-    foeSkin: FOE_SKIN,
+    foeSkin: opponentSkin(STAGES[1], DEFAULT_SAVE.skin),
     shout: '',
     shoutUntil: 0,
     capsEarned: 180,
@@ -112,6 +114,7 @@ function arena(ctx: any, v: BattleView, now: number): void {
   drawHoleRim(ctx, 'p2', v.stage, W, H);
   drawHoleRim(ctx, 'p1', v.stage, W, H);
   new BattleHud().draw(ctx, v, W, H, now);
+  drawPauseButton(ctx, W, false);
 }
 
 frame('1-title', (ctx) => drawTitle(ctx, menu(), W, H, 1200));
@@ -181,3 +184,26 @@ frame('9-title-short', (ctx) => drawTitle(ctx, menu(), W, 760, 1200), 760);
 frame('10-stages-short', (ctx) => drawStages(ctx, menu(), W, 760), 760);
 frame('11-thumbs-short', (ctx) => drawThumbs(ctx, menu({ skinCursor: 5 }), W, 760), 760);
 frame('12-title-tall', (ctx) => drawTitle(ctx, menu(), W, 1010, 1200), 1010);
+
+frame('15-settings', (ctx) => {
+  drawSettings(ctx, menu({ settings: { ...settings, chantSpeed: 'fast', leftHanded: true } }), W, H);
+});
+frame('16-paused', (ctx) => {
+  const sm = smAt('chant');
+  sm.round.beat = 2;
+  arena(ctx, battleView(sm), 2000);
+  drawPaused(ctx, W, H, null);
+});
+frame('17-left-handed', (ctx) => {
+  const sm = smAt('pin');
+  arena(ctx, battleView(sm, { settings: { ...settings, leftHanded: true } }), 3000);
+});
+
+// One frame per opponent so their thumbs can be compared side by side.
+STAGES.forEach((st, i) => {
+  frame(`20-opponent-${i + 1}`, (ctx) => {
+    const sm = smAt('chant');
+    sm.round.beat = 2;
+    arena(ctx, battleView(sm, { stage: st, mode: { kind: 'solo', difficulty: st.difficulty }, foeSkin: opponentSkin(st, DEFAULT_SAVE.skin) }), 2000);
+  });
+});

@@ -39,10 +39,12 @@ export const PIN_INITIAL_ADVANTAGE = 0.25;
 /**
  * ESCAPE: tapping builds "escape credit" which decays, so breaking out needs a
  * sustained fast tap — but reaching the threshold ALWAYS frees you, regardless
- * of how far the pin timer has run. Roughly: 5 taps/sec is the break-even rate,
- * 7+ gets you out in about a second, 3 never will.
+ * of how far the pin timer has run. Break-even is 1 / (0.9 * TAP_VALUE) taps
+ * per second: ~4.3/sec here. 6+ gets you out in about a second, 3 never will.
+ * (Was 0.22 → 5/sec, which most kids can't sustain; every pin against them
+ * was a guaranteed loss.)
  */
-export const ESCAPE_TAP_VALUE = 0.22;
+export const ESCAPE_TAP_VALUE = 0.26;
 export const ESCAPE_DECAY_MS = 900;
 export const ESCAPE_THRESHOLD = 1;
 

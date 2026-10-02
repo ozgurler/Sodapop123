@@ -38,35 +38,51 @@ interface AiTuning {
 }
 
 const TUNING: Record<Difficulty, AiTuning> = {
+  // Tuned against test/tune.ts, where the scripted "average" player reacts in
+  // 360ms with perfect aim and instant swipes — a flattering model of a real
+  // thumb. Targets for that script: rookie ~80%, scrapper ~60%, contender
+  // ~40%, champ ~20% human wins. Escape rates sit relative to the ~4.3
+  // taps/sec break-even in constants.ts: below it the computer never gets
+  // out of a pin on its own, above it it does.
   rookie: {
-    reactionMs: 470,
+    reactionMs: 520,
     jitterMs: 220,
-    faultChance: 0.075,
-    escapeTapsPerSec: 3.2,
-    trackSpeed: 2.2,
-    dodgeChance: 0.15,
-    aimErrorPx: 55,
+    faultChance: 0.08,
+    escapeTapsPerSec: 2.8,
+    trackSpeed: 2.0,
+    dodgeChance: 0.1,
+    aimErrorPx: 60,
     patienceMs: 0,
   },
+  scrapper: {
+    reactionMs: 440,
+    jitterMs: 200,
+    faultChance: 0.05,
+    escapeTapsPerSec: 3.8,
+    trackSpeed: 3.0,
+    dodgeChance: 0.2,
+    aimErrorPx: 42,
+    patienceMs: 150,
+  },
   contender: {
-    reactionMs: 310,
-    jitterMs: 160,
-    faultChance: 0.015,
-    escapeTapsPerSec: 6.4,
-    trackSpeed: 4.5,
-    dodgeChance: 0.35,
-    aimErrorPx: 22,
-    patienceMs: 420,
+    reactionMs: 415,
+    jitterMs: 195,
+    faultChance: 0.03,
+    escapeTapsPerSec: 4.2,
+    trackSpeed: 4.0,
+    dodgeChance: 0.3,
+    aimErrorPx: 34,
+    patienceMs: 350,
   },
   champ: {
-    reactionMs: 240,
-    jitterMs: 120,
-    faultChance: 0.004,
-    escapeTapsPerSec: 8,
-    trackSpeed: 7,
-    dodgeChance: 0.5,
-    aimErrorPx: 6,
-    patienceMs: 950,
+    reactionMs: 345,
+    jitterMs: 170,
+    faultChance: 0.012,
+    escapeTapsPerSec: 5.4,
+    trackSpeed: 5.5,
+    dodgeChance: 0.42,
+    aimErrorPx: 22,
+    patienceMs: 650,
   },
 };
 
@@ -87,6 +103,14 @@ export class AiController {
 
   setDifficulty(d: Difficulty): void {
     this.difficulty = d;
+  }
+
+  /** Mirror of StateMachine.shiftClock — the computer's reaction timers are absolute too. */
+  shiftClock(ms: number): void {
+    if (ms <= 0) return;
+    if (this.strikeAt !== null) this.strikeAt += ms;
+    if (this.faultAt !== null) this.faultAt += ms;
+    if (this.lastEscapeTap) this.lastEscapeTap += ms;
   }
 
   /** Call once per frame from the game loop. */

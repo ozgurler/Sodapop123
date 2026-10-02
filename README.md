@@ -30,8 +30,14 @@ whole screen is yours and the computer drives the top thumb through the same inp
 
 ## Screens
 
-`title` → `thumbs` (cosmetics) → `stages` (one-player only) → `battle` → result card.
-Two-player skips the stage picker and drops straight into a neutral crate.
+`title` → `thumbs` (cosmetics) → `stages` (one-player only) → `battle` → result card,
+plus a `settings` screen off the title. Two-player skips the stage picker and drops
+straight into a neutral crate.
+
+A match can be paused from the button at the top of the crate (Resume / Quit match), and
+it pauses itself when the app goes to the background. Resuming shifts every pending
+deadline forward by however long the game was stopped — without that, a phone call
+mid-pin came back as an instant round loss and every chant beat firing at once.
 
 Winning a stage pays **bottle caps**, which unlock thumb skins. Caps are earned in-game
 only: no purchases, no currency top-ups, no network. That keeps the under-13 store
@@ -198,11 +204,18 @@ script that never jumps the gun makes the fault rule a one-sided penalty on the 
 flags stalemates loudly: an unresolvable round is a design bug, not a draw. Current
 results, unchanged by the portrait rework:
 
-| tier | vs sharp (260ms) | vs average (360ms) | vs casual (480ms) |
-|------|------|------|------|
-| Rookie | 100% human | 100% human | 63% human |
-| Contender | 100% human | 8% human | 0% human |
-| Champ | 23% human | 0% human | 0% human |
+| tier | stage | vs sharp (260ms) | vs average (360ms) | vs casual (480ms) |
+|------|------|------|------|------|
+| Rookie | 1 The Corner Store | 100% human | 100% human | 89% human |
+| Scrapper | 2 The Bottling Room | 100% human | 100% human | 55% human |
+| Contender | 3 The Loading Dock | 100% human | 100% human | 31% human |
+| Champ | 4 The Rooftop Cooler | 100% human | 48% human | 0% human |
+
+"Casual" (480ms, 4.5 taps/sec) is the closest profile to a 7–10 year old, and the one the
+curve is shaped around: stage 2 winnable about half the time, stage 3 a stretch, champ is
+for the adults. "Sharp" is an optimal script and clears everything; that's fine for a
+family party game. Before this retune, stages 2 and 3 shared the Contender tier and the
+Bottling Room beat the average profile 91% of the time.
 
 These are scripted opponents with perfect aim, not people. Champ in particular is brutal
 against a machine and needs real playtesting before launch — treat `TUNING` in
@@ -214,8 +227,12 @@ fingernails were drawn outside the thumb entirely.
 
 ## Accessibility & settings
 
-- Chant speed: slow / normal / fast (`constants.ts` → `BEAT_MS`)
-- Left-handed layout mirrors the HUD edges
+All reachable from the gear on the title screen, all saved on-device:
+
+- Chant speed: slow / normal / fast (`constants.ts` → `BEAT_MS`). Applies from the
+  next chant — `StateMachine.setChantSpeed`, since the constructor only reads it once.
+- Left-handed layout mirrors every edge-anchored HUD element (name pills, round pill,
+  PIN/FREE gauges), so the thumb holding the phone isn't covering what it needs to read
 - Colourblind-safe mode adds shape badges (circle = P1, triangle = P2) on top of an
   already CVD-friendly palette, and the alignment guide changes *shape* (solid vs dashed)
   as well as colour
@@ -230,11 +247,27 @@ which Apple warns about (ITMS-90068) and refuses outright from Spring 2027. Noth
 this game needs an API newer than 14, so raising it costs nothing; iOS 15 covers
 essentially every device still in use.
 
+## Input rules worth knowing
+
+- A strike is a swipe **toward the seam** — up for P1 at the bottom, down for P2. Pulling
+  the thumb back is neither a strike nor, during the chant, a fault. (It used to be both.)
+- Thumbs can only be aimed during the chant and strike phases. During a pin, escape taps
+  count but don't move anything — previously each tap teleported the trapped thumb, and
+  the pinner drawn on top of it, to wherever the finger landed.
+- Input timestamps come from `performance.now()` inside the pointer handler: later than
+  the event itself by well under a millisecond, but on the same clock as the game loop.
+  `event.timeStamp` isn't guaranteed to share that clock on every WebView, and a mismatch
+  silently breaks every timer comparison in the state machine.
+
 ## Notes
 
 - No network calls anywhere; settings, progress and profiles live on-device via Capacitor
   Preferences.
 - `devicePixelRatio` is capped at 2 to hold 60fps on mid-range hardware.
+- Each solo opponent has their own thumb, matched to their name (Pinky Pete is pink, Ruby
+  Knuckle red, Ol' Splinter root-beer, Gold Foil Gus gold) via `Stage.opponentSkin`. If
+  the player happens to be wearing the same skin, the opponent falls back to the neutral
+  walnut so the two thumbs are never identical.
 - In two-player mode both thumbs are named and coloured from the skins in play — P2 gets
   a contrasting free skin, and their name pill is rotated for the player holding the far
   end of the phone.

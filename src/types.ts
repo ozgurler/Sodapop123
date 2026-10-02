@@ -12,11 +12,11 @@ export type GamePhase =
   | 'matchEnd'; // best-of-5 decided
 
 /** Which full-screen view is up. Battle owns the GamePhase above. */
-export type Screen = 'title' | 'thumbs' | 'stages' | 'battle';
+export type Screen = 'title' | 'thumbs' | 'stages' | 'settings' | 'battle';
 
 export type ChantSpeed = 'slow' | 'normal' | 'fast';
 
-export type Difficulty = 'rookie' | 'contender' | 'champ';
+export type Difficulty = 'rookie' | 'scrapper' | 'contender' | 'champ';
 
 /** Single-player vs the computer, or two humans on one device. */
 export type GameMode = { kind: 'solo'; difficulty: Difficulty } | { kind: 'versus' };
@@ -48,6 +48,8 @@ export interface Stage {
   blurb: string;
   opponent: string;
   opponentTitle: string;
+  /** Skin id for the opponent's thumb — matches the name, so Ruby is red. */
+  opponentSkin: string;
   difficulty: Difficulty;
   /** Crate lid gradient, top → bottom. */
   lidTop: string;

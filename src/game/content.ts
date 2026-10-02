@@ -104,8 +104,37 @@ export const FOE_SKIN: Skin = {
   cost: 0,
 };
 
+/**
+ * Thumbs only the computer wears. Not in the picker and not unlockable, so
+ * each champ keeps a look that's theirs. Ruby, Splinter and Gus borrow
+ * player skins that already fit their names.
+ */
+export const OPPONENT_SKINS: Skin[] = [
+  {
+    id: 'pinky-pete',
+    name: 'Pinky Pete',
+    blurb: '',
+    deep: '#d9668f',
+    base: '#ff9ec7',
+    nail: '#fff0f6',
+    pip: '#e0558a',
+    cost: 0,
+  },
+];
+
+const ALL_SKINS = [...SKINS, ...OPPONENT_SKINS, FOE_SKIN];
+
 export function skinById(id: string): Skin {
-  return SKINS.find((s) => s.id === id) ?? SKINS[0];
+  return ALL_SKINS.find((s) => s.id === id) ?? SKINS[0];
+}
+
+/**
+ * The thumb a stage's opponent wears. If the player happens to be wearing
+ * the same one — picked Cherry Bomb, then fights Ruby Knuckle — fall back
+ * to the neutral walnut so the two thumbs never look identical.
+ */
+export function opponentSkin(stage: Stage, playerSkinId: string): Skin {
+  return stage.opponentSkin === playerSkinId ? FOE_SKIN : skinById(stage.opponentSkin);
 }
 
 export const STAGES: Stage[] = [
@@ -115,6 +144,7 @@ export const STAGES: Stage[] = [
     blurb: 'Sticky counter, low stakes',
     opponent: 'Pinky Pete',
     opponentTitle: 'Runs the register',
+    opponentSkin: 'pinky-pete',
     difficulty: 'rookie',
     lidTop: '#d8a86c',
     lidBottom: '#b3824f',
@@ -130,7 +160,8 @@ export const STAGES: Stage[] = [
     blurb: 'Syrup underfoot — misses slide',
     opponent: 'Ruby Knuckle',
     opponentTitle: 'Champ of the Bottling Room',
-    difficulty: 'contender',
+    opponentSkin: 'cherry-bomb',
+    difficulty: 'scrapper',
     lidTop: '#c99257',
     lidBottom: '#a97445',
     plank: 'rgba(59,42,29,.18)',
@@ -145,6 +176,7 @@ export const STAGES: Stage[] = [
     blurb: 'Cold hands, colder crowd',
     opponent: "Ol' Splinter",
     opponentTitle: 'Never lost a crate',
+    opponentSkin: 'root-beer',
     difficulty: 'contender',
     lidTop: '#a8845c',
     lidBottom: '#7f6140',
@@ -160,6 +192,7 @@ export const STAGES: Stage[] = [
     blurb: 'Last crate standing',
     opponent: 'Gold Foil Gus',
     opponentTitle: 'Undisputed',
+    opponentSkin: 'gold-foil',
     difficulty: 'champ',
     lidTop: '#c8a06a',
     lidBottom: '#8e6a41',
@@ -179,6 +212,7 @@ export const VERSUS_STAGE: Stage = {
   blurb: 'Same phone, no computer',
   opponent: 'Blue',
   opponentTitle: '',
+  opponentSkin: 'foe',
   difficulty: 'contender',
   reward: 0,
 };

@@ -299,13 +299,38 @@ export class StateMachine {
     return Math.min(1, this.round.escapeCredit / this.escapeRequirement);
   }
 
+  /**
+   * Shift every pending deadline forward by `ms`. Called after the app was
+   * backgrounded or paused: the game loop's clock keeps running while the
+   * tab is hidden, so without this a 30-second phone call mid-pin comes back
+   * as an instant round loss and every chant beat firing at once.
+   */
+  shiftClock(ms: number): void {
+    if (ms <= 0) return;
+    this.round.phaseStart += ms;
+    if (this.pendingStrike) this.pendingStrike.at += ms;
+    for (const id of ['p1', 'p2'] as PlayerId[]) {
+      const until = this.whiffUntil[id];
+      if (until !== undefined) this.whiffUntil[id] = until + ms;
+    }
+    if (this.lastPinTick) this.lastPinTick += ms;
+  }
+
   // ---- Input API (touch adapter and AI controller both call these) ----
+
+  /** True while a thumb may be aimed. Outside these phases it's locked in place. */
+  private get aimable(): boolean {
+    return this.round.phase === 'chant' || this.round.phase === 'strike';
+  }
 
   /** Player's finger lands in their zone (or the AI places its thumb). */
   press(player: PlayerId, pos: Vec2, _now: number): void {
     const t = this.thumbs[player];
     t.holding = true;
-    t.pos = { x: this.clampSwing(pos.x), y: t.pos.y }; // lateral only; depth comes from reach
+    // Lateral only; depth comes from reach. And only while aiming is live —
+    // otherwise every escape tap during a pin teleports the trapped thumb
+    // (and the pinner drawn on top of it) to wherever the finger landed.
+    if (this.aimable) t.pos = { x: this.clampSwing(pos.x), y: t.pos.y };
     t.strikeStart = pos;
 
     if (this.round.phase === 'pin' && this.round.pinner && player !== this.round.pinner) {
@@ -320,14 +345,21 @@ export class StateMachine {
   move(player: PlayerId, pos: Vec2, now: number, swipeThresholdPx: number): void {
     const t = this.thumbs[player];
     if (!t.holding) return;
+    if (!this.aimable) return;
     t.pos = { x: this.clampSwing(pos.x), y: t.pos.y };
     if (!t.strikeStart) return;
 
-    const dy = Math.abs(t.strikeStart.y - pos.y);
+    // Signed: positive means the finger moved toward the seam. P1 sits at the
+    // bottom and strikes upward (y decreasing); P2 the reverse.
+    const toward = player === 'p1' ? t.strikeStart.y - pos.y : pos.y - t.strikeStart.y;
     const dx = Math.abs(t.strikeStart.x - pos.x);
-    if (Math.hypot(dx, dy) < swipeThresholdPx) return;
+    if (Math.hypot(dx, toward) < swipeThresholdPx) return;
     // Sideways drags are aiming, not striking.
-    if (dy < dx) return;
+    if (Math.abs(toward) < dx) return;
+    // Pulling the thumb BACK is not a strike — and during the chant it must
+    // not be a fault either, or a nervous twitch away from the seam loses
+    // you the round.
+    if (toward <= 0) return;
 
     if (this.round.phase === 'strike') this.registerStrike(player, now);
     else if (this.round.phase === 'chant') this.registerFault(player, now);

@@ -3,18 +3,18 @@ import { StateMachine } from './game/stateMachine';
 import { TouchInput } from './game/input';
 import { AiController } from './game/ai';
 import { Renderer } from './render/renderer';
-import { matchEndButtons } from './render/hud';
+import { matchEndButtons, pauseButton, pauseButtons } from './render/hud';
 import type { BattleView } from './render/hud';
 import type { MenuView } from './render/screens';
-import { stagesLayout, thumbsLayout, titleLayout } from './render/screens';
+import { settingsLayout, stagesLayout, thumbsLayout, titleLayout } from './render/screens';
 import { hit, type Rect } from './render/theme';
 import { GameAudio } from './audio/audio';
 import { GameHaptics } from './audio/haptics';
 import { loadSettings, saveSettings } from './data/settings';
 import { SaveStore } from './data/save';
-import { FOE_SKIN, SKINS, STAGES, VERSUS_STAGE, skinById } from './game/content';
+import { FOE_SKIN, SKINS, STAGES, VERSUS_STAGE, opponentSkin, skinById } from './game/content';
 import { seamY } from './game/geometry';
-import type { GameMode, Screen, Skin, Stage } from './types';
+import type { ChantSpeed, GameMode, Screen, Skin, Stage } from './types';
 import { ScreenOrientation } from '@capacitor/screen-orientation';
 import { Capacitor } from '@capacitor/core';
 
@@ -44,6 +44,7 @@ async function boot(): Promise<void> {
   const audio = new GameAudio(() => settings.soundEnabled);
   const haptics = new GameHaptics(() => settings.hapticsEnabled);
   const input = new TouchInput(canvas, sm, renderer.toDesign);
+  input.setReserved((pt) => hit(pauseButton(renderer.width), pt.x, pt.y));
 
   let screen: Screen = 'title';
   let mode: GameMode = { kind: 'solo', difficulty: 'contender' };
@@ -57,6 +58,9 @@ async function boot(): Promise<void> {
   let shoutUntil = 0;
   let capsEarned = 0;
   let matchRecorded = false;
+  /** Match clock is frozen; the pause card is up. */
+  let paused = false;
+  let pausedAt = 0;
   let skinCursor = Math.max(0, SKINS.findIndex((s) => s.id === save.data.skin));
   let stageCursor = save.data.stageIndex;
 
@@ -81,6 +85,27 @@ async function boot(): Promise<void> {
     sm.setLayout(renderer.width, renderer.height);
     sm.startMatch(performance.now());
     screen = 'battle';
+  }
+
+  function pause(now = performance.now()): void {
+    if (paused || screen !== 'battle' || sm.phase === 'matchEnd') return;
+    paused = true;
+    pausedAt = now;
+  }
+
+  function resume(now = performance.now()): void {
+    if (!paused) return;
+    paused = false;
+    // Every deadline moves forward by however long we were stopped, so
+    // the match carries on from exactly where it was.
+    const gap = now - pausedAt;
+    sm.shiftClock(gap);
+    ai?.shiftClock(gap);
+  }
+
+  function quitMatch(): void {
+    paused = false;
+    screen = 'title';
   }
 
   async function finishMatch(): Promise<void> {
@@ -167,8 +192,10 @@ async function boot(): Promise<void> {
     }
     if (screen === 'thumbs') return thumbsLayout(w, h);
     if (screen === 'stages') return stagesLayout(w, h);
+    if (screen === 'settings') return settingsLayout(w, h);
     if (sm.phase === 'matchEnd') return matchEndButtons(w, h, canAdvance());
-    return {};
+    if (paused) return pauseButtons(w, h);
+    return { pause: pauseButton(w) };
   }
 
   function canAdvance(): boolean {
@@ -214,9 +241,8 @@ async function boot(): Promise<void> {
         startMatch({ kind: 'versus' }, VERSUS_STAGE);
       } else if (key === 'thumbs') {
         screen = 'thumbs';
-      } else if (key === 'sound') {
-        settings.soundEnabled = !settings.soundEnabled;
-        await saveSettings(settings);
+      } else if (key === 'settings') {
+        screen = 'settings';
       } else if (key === 'help') {
         helpOpen = true;
       } else if (key === 'helpClose') {
@@ -244,6 +270,28 @@ async function boot(): Promise<void> {
       return;
     }
 
+    if (screen === 'settings') {
+      if (key === 'back') {
+        screen = 'title';
+      } else if (key === 'sound') {
+        settings.soundEnabled = !settings.soundEnabled;
+      } else if (key === 'haptics') {
+        settings.hapticsEnabled = !settings.hapticsEnabled;
+        if (settings.hapticsEnabled) void haptics.beat(); // feel it land
+      } else if (key === 'leftHanded') {
+        settings.leftHanded = !settings.leftHanded;
+      } else if (key === 'colorblind') {
+        settings.colorblindSafe = !settings.colorblindSafe;
+      } else if (key.startsWith('speed:')) {
+        settings.chantSpeed = key.slice(6) as ChantSpeed;
+        // Takes effect on the next chant. The constructor only reads this
+        // once, so without this call the setting would save but never apply.
+        sm.setChantSpeed(settings.chantSpeed);
+      }
+      if (key !== 'back') await saveSettings(settings);
+      return;
+    }
+
     if (screen === 'stages') {
       if (key === 'back') screen = 'title';
       else if (key === 'prev') stageCursor = Math.max(0, stageCursor - 1);
@@ -257,7 +305,16 @@ async function boot(): Promise<void> {
       return;
     }
 
-    // Battle: only the end-of-match card is tappable.
+    // Battle.
+    if (key === 'pause') {
+      pause();
+      return;
+    }
+    if (paused) {
+      if (key === 'resume') resume();
+      else if (key === 'quit') quitMatch();
+      return;
+    }
     if (sm.phase !== 'matchEnd') return;
     if (key === 'menu') {
       screen = 'title';
@@ -271,17 +328,33 @@ async function boot(): Promise<void> {
     }
   }
 
+  // ------------------------------------------------------------- lifecycle
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      pause();
+    } else {
+      // The loop clock kept running while hidden. If we were already paused
+      // (by the user) that gap is absorbed on resume; if the match wasn't
+      // pausable (menus, match end) there's nothing to shift. Either way the
+      // audio context has probably been suspended by the OS — reopen it on
+      // the next gesture, which audio.unlock() on pointerdown already does.
+    }
+  });
+
   // ------------------------------------------------------------------ loop
 
   const loop = new GameLoop(
     (now) => {
       sm.setLayout(renderer.width, renderer.height);
       if (screen === 'battle') {
-        // The card at the end of a match owns the screen; stop feeding the
-        // state machine so a celebratory tap doesn't register as a strike.
-        input.setLive(sm.phase !== 'matchEnd');
-        ai?.tick(now); // the computer plays through the same input API you do
-        sm.update(now);
+        // The end-of-match card and the pause card each own the screen; stop
+        // feeding the state machine so a tap there never lands as a strike.
+        input.setLive(sm.phase !== 'matchEnd' && !paused);
+        if (!paused) {
+          ai?.tick(now); // the computer plays through the same input API you do
+          sm.update(now);
+        }
       } else {
         input.setLive(false);
       }
@@ -295,18 +368,18 @@ async function boot(): Promise<void> {
           mode,
           stage,
           skin: skinById(save.data.skin),
-          foeSkin: mode.kind === 'versus' ? versusFoeSkin(save.data.skin) : FOE_SKIN,
+          foeSkin: mode.kind === 'versus' ? versusFoeSkin(save.data.skin) : opponentSkin(stage, save.data.skin),
           shout,
           shoutUntil,
           capsEarned,
         };
-        renderer.drawBattle(view, now, 16.67, canAdvance(), pressed);
+        renderer.drawBattle(view, now, 16.67, canAdvance(), pressed, paused);
       } else {
         const view: MenuView = {
           save: save.data,
           skinCursor,
           stageCursor,
-          soundOn: settings.soundEnabled,
+          settings,
           helpOpen,
           pressed,
           toast,

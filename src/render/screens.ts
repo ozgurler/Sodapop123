@@ -1,5 +1,5 @@
-import type { SaveData, Skin } from '../types';
-import { SKINS, STAGES, skinById } from '../game/content';
+import type { ChantSpeed, SaveData, Settings, Skin } from '../types';
+import { SKINS, STAGES, opponentSkin, skinById } from '../game/content';
 import { drawThumbPortrait } from './crate';
 import {
   C,
@@ -7,9 +7,10 @@ import {
   chevron,
   chunk,
   display,
-  note,
+  gear,
   roundRectPath,
   star,
+  toggle,
   tracked,
   ui,
   vgrad,
@@ -23,7 +24,7 @@ export interface MenuView {
   skinCursor: number;
   /** Index into STAGES the carousel is showing. */
   stageCursor: number;
-  soundOn: boolean;
+  settings: Settings;
   /** The how-to-play card is up; it swallows every tap until dismissed. */
   helpOpen: boolean;
   pressed: string | null;
@@ -109,7 +110,7 @@ export function titleLayout(w: number, h: number): Record<string, Rect> {
   return {
     solo: { x: 26, y: h - 300, w: bw, h: 92 },
     versus: { x: 26, y: h - 196, w: bw, h: 92 },
-    sound: { x: ix - 108, y: iconY, w: 64, h: 64 },
+    settings: { x: ix - 108, y: iconY, w: 64, h: 64 },
     thumbs: { x: ix - 32, y: iconY, w: 64, h: 64 },
     help: { x: ix + 44, y: iconY, w: 64, h: 64 },
     helpClose: { x: 46, y: h / 2 + 112, w: w - 92, h: 60 },
@@ -258,7 +259,8 @@ export function drawTitle(
   const wiggle = Math.sin(now / 380) * 0.06;
   const ty = Math.max(310, h * 0.46);
   drawThumbPortrait(ctx, skinById(v.save.skin), w / 2 - 64, ty, 84, 182, -0.2 + wiggle);
-  drawThumbPortrait(ctx, SKINS[3], w / 2 + 64, ty, 84, 182, 0.24 - wiggle);
+  const nextStage = STAGES[Math.min(Math.max(0, v.save.cleared + 1), STAGES.length - 1)];
+  drawThumbPortrait(ctx, opponentSkin(nextStage, v.save.skin), w / 2 + 64, ty, 84, 182, 0.24 - wiggle);
   ctx.save();
   ctx.translate(w / 2, ty - 92);
   ctx.rotate(-0.1);
@@ -274,7 +276,7 @@ export function drawTitle(
   modeButton(ctx, L.solo, '1', C.blue, '1 player', 'Beat the crate champs', v.pressed === 'solo');
   modeButton(ctx, L.versus, '2', C.teal, '2 players', 'Same phone, one crate', v.pressed === 'versus');
 
-  for (const key of ['sound', 'thumbs', 'help']) {
+  for (const key of ['settings', 'thumbs', 'help']) {
     const r = L[key];
     button(ctx, r, key === 'help' ? '?' : '', {
       fill: 'rgba(255,255,255,.16)',
@@ -284,13 +286,108 @@ export function drawTitle(
       font: display(24),
       drop: 0,
       pressed: v.pressed === key,
-      alpha: key === 'sound' && !v.soundOn ? 0.55 : 1,
     });
     const cx = r.x + r.w / 2;
     const cy = r.y + r.h / 2;
-    if (key === 'sound') note(ctx, cx, cy, 13, C.white, !v.soundOn);
+    if (key === 'settings') gear(ctx, cx, cy, 15, C.white);
     else if (key === 'thumbs') star(ctx, cx, cy + 1, 15, C.white);
   }
+}
+
+// ------------------------------------------------------------------ settings
+
+const SPEEDS: ChantSpeed[] = ['slow', 'normal', 'fast'];
+const ROW_H = 76;
+
+/**
+ * Every setting the store listing promises, reachable from one screen.
+ * Toggle rows have one hit region each; the chant-speed row has three.
+ */
+export function settingsLayout(w: number, h: number): Record<string, Rect> {
+  const top = 136;
+  const rowX = 22;
+  const rowW = w - 44;
+  const out: Record<string, Rect> = {
+    back: { x: 18, y: 56, w: 56, h: 56 },
+  };
+  const rows = ['sound', 'haptics', 'speed', 'leftHanded', 'colorblind'];
+  rows.forEach((key, i) => {
+    const y = top + i * (ROW_H + 10);
+    if (key === 'speed') {
+      // Three segments on the right half of the row.
+      const segW = (rowW * 0.5 - 8) / 3;
+      SPEEDS.forEach((s, j) => {
+        out[`speed:${s}`] = {
+          x: rowX + rowW * 0.5 + j * (segW + 4),
+          y: y + 16,
+          w: segW,
+          h: ROW_H - 32,
+        };
+      });
+    } else {
+      out[key] = { x: rowX, y, w: rowW, h: ROW_H };
+    }
+  });
+  void h;
+  return out;
+}
+
+export function drawSettings(ctx: CanvasRenderingContext2D, v: MenuView, w: number, h: number): void {
+  ctx.fillStyle = vgrad(ctx, 0, h, '#3b2f45', C.ink);
+  ctx.fillRect(0, 0, w, h);
+  stripes(ctx, w, h, 0, 0.04);
+
+  const L = settingsLayout(w, h);
+  header(ctx, w, 'SETTINGS', L.back, v.pressed);
+
+  const s = v.settings;
+  const rows: Array<[string, string, string, boolean | null]> = [
+    ['sound', 'Sound', 'Chant beats and fizz', s.soundEnabled],
+    ['haptics', 'Haptics', 'Feel the beat and the pin', s.hapticsEnabled],
+    ['speed', 'Chant speed', 'Slow for little kids', null],
+    ['leftHanded', 'Left-handed', 'Mirror the gauges and labels', s.leftHanded],
+    ['colorblind', 'Colourblind-safe', 'Shapes as well as colours', s.colorblindSafe],
+  ];
+
+  const top = 136;
+  rows.forEach(([key, title, sub, on], i) => {
+    const y = top + i * (ROW_H + 10);
+    const r: Rect = { x: 22, y, w: w - 44, h: ROW_H };
+    chunk(ctx, r, { fill: C.cream, radius: 20, border: 5, drop: 5, pressed: v.pressed === key });
+    const sink = v.pressed === key ? 3 : 0;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = display(19);
+    ctx.fillStyle = C.ink;
+    ctx.fillText(title, r.x + 18, y + 28 + sink);
+    ctx.font = ui(11.5, 700);
+    ctx.fillStyle = C.grey;
+    ctx.fillText(sub, r.x + 18, y + 50 + sink);
+
+    if (key === 'speed') {
+      SPEEDS.forEach((sp) => {
+        const seg = L[`speed:${sp}`];
+        const active = s.chantSpeed === sp;
+        button(ctx, seg, sp[0].toUpperCase() + sp.slice(1), {
+          fill: active ? C.gold : 'rgba(34,29,43,.08)',
+          text: active ? C.ink : C.grey,
+          border: active ? 4 : 3,
+          borderColor: active ? C.ink : 'rgba(34,29,43,.35)',
+          radius: 12,
+          font: display(14),
+          drop: active ? 3 : 0,
+          pressed: v.pressed === `speed:${sp}`,
+        });
+      });
+    } else if (on !== null) {
+      toggle(ctx, { x: r.x + r.w - 82, y: y + 20 + sink, w: 64, h: 36 }, on);
+    }
+  });
+
+  ctx.textAlign = 'center';
+  ctx.font = ui(12, 700);
+  ctx.fillStyle = 'rgba(255,246,232,.55)';
+  ctx.fillText('Everything is saved on this phone. Nothing leaves it.', w / 2, h - 40);
 }
 
 function modeButton(
@@ -527,7 +624,7 @@ export function drawStages(ctx: CanvasRenderingContext2D, v: MenuView, w: number
   // Opponent strip.
   const strip: Rect = { x: 22, y: dotY + 22, w: w - 44, h: 78 };
   chunk(ctx, strip, { fill: 'rgba(0,0,0,.18)', radius: 20, border: 0 });
-  drawThumbPortrait(ctx, SKINS[3], strip.x + 44, strip.y + strip.h / 2, 40, 56);
+  drawThumbPortrait(ctx, opponentSkin(stage, v.save.skin), strip.x + 44, strip.y + strip.h / 2, 40, 56);
   ctx.textAlign = 'left';
   ctx.font = display(17);
   ctx.fillStyle = C.white;

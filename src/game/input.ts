@@ -20,6 +20,13 @@ export class TouchInput {
   private mode: GameMode = { kind: 'versus' };
   /** Battle screen only — menus route their own taps. */
   private live = false;
+  /**
+   * Design-space points the host has claimed for its own controls (the
+   * pause button). A touch starting there is ignored entirely — in solo mode
+   * the whole screen is P1's zone, so without this, tapping pause would also
+   * land a thumb press.
+   */
+  private reserved: (p: Vec2) => boolean = () => false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -35,6 +42,10 @@ export class TouchInput {
   setMode(mode: GameMode): void {
     this.mode = mode;
     this.reset();
+  }
+
+  setReserved(fn: (p: Vec2) => boolean): void {
+    this.reserved = fn;
   }
 
   setLive(live: boolean): void {
@@ -66,14 +77,18 @@ export class TouchInput {
     if (!this.live) return;
     e.preventDefault();
     const p = this.toDesign(e.offsetX, e.offsetY);
+    if (this.reserved(p)) return;
     const player = this.zoneOf(p.y);
     if (this.claimed[player] !== undefined) return; // palm rejection
     this.claimed[player] = e.pointerId;
     this.owners.set(e.pointerId, player);
     this.canvas.setPointerCapture(e.pointerId);
-    // Timestamp from the event, not the next frame — the 80ms clash window
-    // is only honest if input time is the time the finger actually landed.
-    this.sm.press(player, p, e.timeStamp);
+    // Stamp with performance.now() HERE, in the handler — not on the next
+    // animation frame (up to 16ms late, which matters for an 80ms clash
+    // window) and not with e.timeStamp (not guaranteed to share the game
+    // loop's clock on every WebView; a mismatch silently breaks every
+    // timer comparison in the state machine).
+    this.sm.press(player, p, performance.now());
   };
 
   private onMove = (e: PointerEvent): void => {
@@ -81,7 +96,7 @@ export class TouchInput {
     if (!player) return;
     e.preventDefault();
     const threshold = this.sm.height * STRIKE_SWIPE_FRACTION;
-    this.sm.move(player, this.toDesign(e.offsetX, e.offsetY), e.timeStamp, threshold);
+    this.sm.move(player, this.toDesign(e.offsetX, e.offsetY), performance.now(), threshold);
   };
 
   private onUp = (e: PointerEvent): void => {

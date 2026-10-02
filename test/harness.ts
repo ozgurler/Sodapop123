@@ -54,10 +54,13 @@ function makeSm(): { sm: StateMachine; log: string[] } {
     const cap = now + 20000;
     while (sm.phase !== p && now < cap) tick(16);
   };
+  // A strike is a swipe TOWARD the seam: up (negative y) for P1 at the
+  // bottom, down for P2 at the top. Swiping away is not a strike.
   const swipe = (pl: 'p1' | 'p2'): void => {
     const t = sm.thumbs[pl];
+    const dir = pl === 'p1' ? -1 : 1;
     sm.press(pl, { x: t.pos.x, y: t.pos.y }, now);
-    sm.move(pl, { x: t.pos.x, y: t.pos.y + 60 }, now, 24);
+    sm.move(pl, { x: t.pos.x, y: t.pos.y + dir * 60 }, now, 24);
     sm.release(pl);
   };
 
@@ -103,7 +106,7 @@ function makeSm(): { sm: StateMachine; log: string[] } {
   sm.aim('p1', CX);
   sm.aim('p2', CX);
   sm.press('p1', { x: CX, y: CY }, now);
-  sm.move('p1', { x: CX, y: CY + 60 }, now, 24);
+  sm.move('p1', { x: CX, y: CY - 60 }, now, 24);
   sm.release('p1');
   tick(400); // let the reach animation settle
 
@@ -176,7 +179,7 @@ function makeSm(): { sm: StateMachine; log: string[] } {
   sm2.aim('p1', CX);
   sm2.aim('p2', CX);
   sm2.press('p1', { x: CX, y: CY }, t2);
-  sm2.move('p1', { x: CX, y: CY + 60 }, t2, 24);
+  sm2.move('p1', { x: CX, y: CY - 60 }, t2, 24);
   sm2.release('p1');
   t2 += 120;
   sm2.update(t2);
@@ -210,10 +213,13 @@ function makeSm(): { sm: StateMachine; log: string[] } {
     const cap = now + 20000;
     while (sm.phase !== p && now < cap) tick(16);
   };
+  // A strike is a swipe TOWARD the seam: up (negative y) for P1 at the
+  // bottom, down for P2 at the top. Swiping away is not a strike.
   const swipe = (pl: 'p1' | 'p2'): void => {
     const t = sm.thumbs[pl];
+    const dir = pl === 'p1' ? -1 : 1;
     sm.press(pl, { x: t.pos.x, y: t.pos.y }, now);
-    sm.move(pl, { x: t.pos.x, y: t.pos.y + 60 }, now, 24);
+    sm.move(pl, { x: t.pos.x, y: t.pos.y + dir * 60 }, now, 24);
     sm.release(pl);
   };
 
@@ -261,8 +267,8 @@ function makeSm(): { sm: StateMachine; log: string[] } {
     if (sm.phase === 'strike') {
       sm.aim('p1', W / 2);
       sm.aim('p2', W / 2);
-      sm.press('p1', { x: W / 2, y: 300 }, now);
-      sm.move('p1', { x: W / 2, y: 360 }, now, 24);
+      sm.press('p1', { x: W / 2, y: 360 }, now);
+      sm.move('p1', { x: W / 2, y: 300 }, now, 24);
       sm.release('p1');
     } else if (sm.phase === 'pin') {
       const trapped = sm.round.pinner === 'p1' ? 'p2' : 'p1';
@@ -314,6 +320,92 @@ console.log('— G: an open strike window still resolves —');
   expect(sm.phase === 'matchEnd', 'round still reaches a result', `(phase=${sm.phase})`);
 }
 
+
+
+// --- H: input is phase-gated and direction-aware --------------------------
+console.log('— H: input is phase-gated and direction-aware —');
+{
+  const sm = new StateMachine('fast', 0);
+  sm.setLayout(W, H);
+  sm.startMatch(0);
+  let now = 0;
+  const tick = (ms: number): void => { now += ms; sm.update(now); };
+  while (sm.phase !== 'chant' && now < 20000) tick(16);
+
+  // Swiping AWAY from the seam during the chant must not be a fault.
+  const p1 = sm.thumbs.p1;
+  sm.press('p1', { x: CX, y: p1.pos.y }, now);
+  sm.move('p1', { x: CX, y: p1.pos.y + 80 }, now, 24); // downward = away for P1
+  sm.release('p1');
+  expect(p1.faults === 0, 'pulling the thumb back during the chant is not a fault', `(faults=${p1.faults})`);
+
+  // ...and during the strike window it must not count as a strike either.
+  while (sm.phase !== 'strike' && now < 20000) tick(16);
+  sm.aim('p1', CX); sm.aim('p2', CX);
+  sm.press('p1', { x: CX, y: p1.pos.y }, now);
+  sm.move('p1', { x: CX, y: p1.pos.y + 80 }, now, 24);
+  sm.release('p1');
+  tick(200);
+  expect(sm.phase === 'strike', 'pulling the thumb back is not a strike', `(phase=${sm.phase})`);
+
+  // Now a real strike pins. During the pin, escape taps must NOT move the thumbs.
+  sm.press('p1', { x: CX, y: p1.pos.y }, now);
+  sm.move('p1', { x: CX, y: p1.pos.y - 80 }, now, 24);
+  sm.release('p1');
+  tick(200);
+  expect(sm.phase === 'pin' && sm.round.pinner === 'p1', 'swiping toward the seam pins', `(phase=${sm.phase})`);
+  const xBefore = sm.thumbs.p2.pos.x;
+  sm.press('p2', { x: CX + 120, y: sm.thumbs.p2.pos.y }, now); // tap far off to the side
+  sm.release('p2');
+  expect(sm.thumbs.p2.pos.x === xBefore, 'escape taps do not reposition the trapped thumb', `(${xBefore} -> ${sm.thumbs.p2.pos.x})`);
+  expect(sm.round.escapeTaps === 1, 'but the tap still counts toward escaping');
+}
+
+
+// --- I: a backgrounded match must not resolve itself ----------------------
+console.log('— I: a backgrounded match must not resolve itself —');
+{
+  const sm = new StateMachine('fast', 0);
+  sm.setLayout(W, H);
+  sm.startMatch(0);
+  let now = 0;
+  const tick = (ms: number): void => { now += ms; sm.update(now); };
+  while (sm.phase !== 'strike' && now < 20000) tick(16);
+  sm.aim('p1', CX); sm.aim('p2', CX);
+  const p1 = sm.thumbs.p1;
+  sm.press('p1', { x: CX, y: p1.pos.y }, now);
+  sm.move('p1', { x: CX, y: p1.pos.y - 80 }, now, 24);
+  sm.release('p1');
+  tick(200);
+  expect(sm.phase === 'pin', 'setup: a pin is in progress', `(phase=${sm.phase})`);
+  const meterBefore = sm.round.pinMeter;
+
+  // The phone goes in a pocket for 30 seconds. The loop clock keeps running.
+  const gap = 30000;
+  now += gap;
+  sm.shiftClock(gap);
+  sm.update(now);
+  expect(sm.phase === 'pin', 'after shiftClock the pin is still in progress', `(phase=${sm.phase})`);
+  expect(
+    Math.abs(sm.round.pinMeter - meterBefore) < 0.05,
+    'and the pin meter did not advance while backgrounded',
+    `(${meterBefore.toFixed(2)} -> ${sm.round.pinMeter.toFixed(2)})`,
+  );
+
+  // Without the shift it would have been an instant loss — prove the test means something.
+  const sm2 = new StateMachine('fast', 0);
+  sm2.setLayout(W, H);
+  sm2.startMatch(0);
+  let n2 = 0;
+  while (sm2.phase !== 'strike' && n2 < 20000) { n2 += 16; sm2.update(n2); }
+  sm2.aim('p1', CX); sm2.aim('p2', CX);
+  sm2.press('p1', { x: CX, y: sm2.thumbs.p1.pos.y }, n2);
+  sm2.move('p1', { x: CX, y: sm2.thumbs.p1.pos.y - 80 }, n2, 24);
+  sm2.release('p1');
+  n2 += 200; sm2.update(n2);
+  n2 += gap; sm2.update(n2);
+  expect(sm2.phase !== 'pin', 'control: without shiftClock the same gap ends the round', `(phase=${sm2.phase})`);
+}
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`);
 process.exit(failures === 0 ? 0 : 1);

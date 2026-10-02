@@ -68,10 +68,20 @@ function namePill(
   y: number,
   flip: boolean,
   w: number,
+  mirror = false,
 ): void {
-  const label = name.toUpperCase();
+  let label = name.toUpperCase();
   ctx.font = display(13);
+  // The pause button owns the centre 40px of this row. Shrink a long name
+  // until the pill clears it — "RUBY KNUCKLE" at full width reaches it.
+  const maxW = w / 2 - 20 - x - 10;
+  while (ctx.measureText(label).width + 38 > maxW && label.length > 4) {
+    label = label.slice(0, -2) + '\u2026';
+  }
   const pw = ctx.measureText(label).width + 38;
+  // Left-handed: anchor to the right edge instead. (Independent of `flip`,
+  // which rotates the pill 180° for the player at the far end in versus.)
+  if (mirror) x = w - x - pw;
   ctx.save();
   if (flip) {
     ctx.translate(w / 2, y + 15);
@@ -136,16 +146,22 @@ export class BattleHud {
     // Top bar: who you're fighting, and which round it is. In two-player the
     // top thumb belongs to a person reading the phone upside down, so their
     // name pill is rotated for them and P1 gets a matching one at the bottom.
+    // Left-handed mirrors every edge-anchored element: name pills swap to
+    // the right, and the PIN/FREE gauges swap sides, so the thumb holding
+    // the phone isn't covering the thing it most needs to read.
+    const lh = settings.leftHanded;
     ctx.textBaseline = 'middle';
-    namePill(ctx, versus ? v.foeSkin.name : v.stage.opponent, v.foeSkin.pip, 56, 52, versus, w);
-    if (versus) namePill(ctx, v.skin.name, v.skin.pip, 56, h - 82, false, w);
+    namePill(ctx, versus ? v.foeSkin.name : v.stage.opponent, v.foeSkin.pip, 56, 52, versus, w, lh);
+    if (versus) namePill(ctx, v.skin.name, v.skin.pip, 56, h - 82, false, w, lh);
 
     const roundLabel = `ROUND ${sm.match.roundNumber}`;
     ctx.font = display(14);
     const rw = ctx.measureText(roundLabel).width + 24;
-    chunk(ctx, { x: w - 56 - rw, y: 52, w: rw, h: 30 }, { fill: C.ink, radius: 12, border: 0 });
+    const rx = lh ? 56 : w - 56 - rw;
+    chunk(ctx, { x: rx, y: 52, w: rw, h: 30 }, { fill: C.ink, radius: 12, border: 0 });
     ctx.fillStyle = C.gold;
-    ctx.fillText(roundLabel, w - 56 - rw / 2, 68);
+    ctx.textAlign = 'center';
+    ctx.fillText(roundLabel, rx + rw / 2, 68);
 
     // Round-win pips, one row per player, each on their own side of the seam.
     pips(ctx, w / 2, 100, sm.match.roundsWon.p2, v.foeSkin.pip, settings.colorblindSafe ? 'p2' : null);
@@ -157,8 +173,10 @@ export class BattleHud {
     const pinning = sm.phase === 'pin';
     const gTop = 150;
     const gBottom = h - 150;
-    gauge(ctx, 14, gTop, gBottom, 26, sm.round.pinMeter, C.gold, C.orange, 'PIN', pinning);
-    gauge(ctx, w - 40, gTop, gBottom, 26, sm.escapeProgress, C.tealLight, C.tealDeep, 'FREE', pinning);
+    const pinX = lh ? w - 40 : 14;
+    const freeX = lh ? 14 : w - 40;
+    gauge(ctx, pinX, gTop, gBottom, 26, sm.round.pinMeter, C.gold, C.orange, 'PIN', pinning);
+    gauge(ctx, freeX, gTop, gBottom, 26, sm.escapeProgress, C.tealLight, C.tealDeep, 'FREE', pinning);
 
     if (sm.phase === 'chant') this.drawBeats(ctx, sm, w, seam);
     if (sm.phase === 'strike') this.drawGo(ctx, w, seam, now);
@@ -320,6 +338,80 @@ export class BattleHud {
     ctx.textBaseline = 'middle';
     ctx.fillText(label, w / 2, seamY(h) + 2);
   }
+}
+
+/**
+ * The pause control. Centre-top, above P2's bottle-hole: that band carries
+ * nothing else, and no strike or escape gesture ever passes through it (P2
+ * swipes DOWN toward the seam, away from it). Small on purpose — it must be
+ * findable, not easy to hit by accident mid-match.
+ */
+export function pauseButton(w: number): Rect {
+  return { x: w / 2 - 20, y: 47, w: 40, h: 40 };
+}
+
+export function drawPauseButton(ctx: CanvasRenderingContext2D, w: number, pressed: boolean): void {
+  const r = pauseButton(w);
+  chunk(ctx, r, {
+    fill: 'rgba(34,29,43,.55)',
+    radius: 14,
+    border: 3,
+    borderColor: 'rgba(255,246,232,.6)',
+    pressed,
+  });
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2 + (pressed ? 3 : 0);
+  ctx.fillStyle = C.cream;
+  ctx.fillRect(cx - 7, cy - 8, 5, 16);
+  ctx.fillRect(cx + 2, cy - 8, 5, 16);
+}
+
+/** Buttons on the pause card. */
+export function pauseButtons(w: number, h: number): Record<string, Rect> {
+  const cardW = w - 72;
+  const x = 36;
+  const y = h / 2 - 110;
+  return {
+    resume: { x: x + 20, y: y + 92, w: cardW - 40, h: 60 },
+    quit: { x: x + 20, y: y + 164, w: cardW - 40, h: 52 },
+  };
+}
+
+export function drawPaused(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  pressed: string | null,
+): void {
+  ctx.fillStyle = C.scrim;
+  ctx.fillRect(0, 0, w, h);
+  const cardW = w - 72;
+  const card: Rect = { x: 36, y: h / 2 - 110, w: cardW, h: 240 };
+  chunk(ctx, card, { fill: C.cream, radius: 26, border: 6, drop: 9 });
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = display(34);
+  ctx.fillStyle = C.ink;
+  ctx.fillText('Paused', w / 2, card.y + 48);
+
+  const b = pauseButtons(w, h);
+  button(ctx, b.resume, 'Resume', {
+    fill: C.teal,
+    text: C.white,
+    shadow: C.tealShadow,
+    radius: 20,
+    font: display(22),
+    drop: 6,
+    pressed: pressed === 'resume',
+  });
+  button(ctx, b.quit, 'Quit match', {
+    fill: C.white,
+    text: C.cherry,
+    radius: 18,
+    font: display(18),
+    drop: 5,
+    pressed: pressed === 'quit',
+  });
 }
 
 /** Buttons on the end-of-match card. Returned so main.ts can hit-test them. */
